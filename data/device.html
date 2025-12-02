@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Page</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <header>
+        <h1>%BOARD_TYPE% Device Page</h1>
+        <span id="headerLocation" class="header-location">%LOCATION%</span>
+    </header>
+
+    <main>
+        <div class="card">
+            <p>This is a template for device-specific pages. Replace this content with your application logic.</p>
+
+            <div class="actions">
+                <a href="/" class="btn-link">Home</a>
+            </div>
+        </div>
+
+        <!-- Add your device-specific content here -->
+
+    </main>
+
+    <footer>
+        <div class="footer-grid">
+            <!-- Row 1: Network & Connection Info -->
+            <div class="footer-row">
+                <div class="footer-pair">
+                    <span class="label">Host:</span>
+                    <span class="value">%HOSTNAME%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">IP:</span>
+                    <span class="value">%IP%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">SSID:</span>
+                    <span class="value">%SSID%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">Signal:</span>
+                    <span class="value" id="rssi">%RSSI%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">MQTT:</span>
+                    <span class="value">%MQTT_STATUS%</span>
+                </div>
+
+                <!-- CAN -->
+                <div class="footer-pair">
+                    <span class="label">CAN ID:</span>
+                    <span class="value">%CAN_ID%</span>
+                </div>
+                <div class="footer-pair">
+                    <span class="label">CAN:</span>
+                    <span class="value">%CAN_STATUS%</span>
+                </div>
+            </div>
+
+            <!-- Row 2: System Info -->
+            <div class="footer-row">
+                <div class="footer-pair">
+                    <span class="label">FW:</span>
+                    <span class="value">%FW_REV%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">Date/Time:</span>
+                    <span class="value" id="runtime">%DATETIME%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">Uptime:</span>
+                    <span class="value" id="uptime">%UPTIME%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">Free Mem:</span>
+                    <span class="value" id="freemem">%FREE_MEMORY%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="copyright">
+            HSC Engineering &copy;2025
+        </div>
+    </footer>
+
+    <script>
+        // Auto-refresh dynamic footer values every 2 seconds
+        setInterval(() => {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.uptime) document.getElementById('uptime').textContent = data.uptime;
+                    if (data.rssi) document.getElementById('rssi').textContent = data.rssi;
+                    if (data.free_memory) document.getElementById('freemem').textContent = data.free_memory;
+                    if (data.runtime) document.getElementById('runtime').textContent = data.runtime;
+                })
+                .catch(err => console.error('Failed to refresh status:', err));
+        }, 2000);
+    </script>
+</body>
+
+</html>

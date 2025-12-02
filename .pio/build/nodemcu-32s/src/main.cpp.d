@@ -1,5 +1,6 @@
-.pio/build/nodemcu-32s/src/main.cpp.o: src/main.cpp src/ConfigManager.h \
- src/config.h \
+.pio/build/nodemcu-32s/src/main.cpp.o: src/main.cpp src/config.h \
+ lib/HSC_Base/src/HSC_Base.h lib/HSC_Base/src/ConfigManager.h \
+ lib/HSC_Base/src/config.h \
  /Users/dlambert/.platformio/packages/framework-arduinoespressif32/cores/esp32/Arduino.h \
  /Users/dlambert/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp_arduino_version.h \
  /Users/dlambert/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/freertos/FreeRTOS.h \

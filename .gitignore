@@ -1,0 +1,21 @@
+# Ignore PlatformIO build files
+.pio/
+.vscode/
+.clang_complete
+.gcc-flags.json
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE files
+*.swp
+*.swo
+*~
+.idea/
+
+# Ignore credentials (if you accidentally add them)
+credentials.h
+
+# Keep the library
+!lib/HSC_Base/
