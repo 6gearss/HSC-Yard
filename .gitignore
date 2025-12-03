@@ -3,6 +3,7 @@
 .vscode/
 .clang_complete
 .gcc-flags.json
+compile_commands.json
 
 # Ignore OS files
 .DS_Store
