@@ -7,13 +7,28 @@
 #undef BOARD_TYPE_SHORT
 
 static const char BOARD_TYPE_DESC[] =
-    "HSC NEW Device"; // Full description for web UI
+    "HSC YARD Device"; // Full description for web UI
 static const char BOARD_TYPE_SHORT[] =
-    "NEW"; // Short name for MQTT (e.g., "BASE-1", "YARD-2", "SIGNAL-3")
+    "YARD"; // Short name for MQTT (e.g., "BASE-1", "YARD-2", "SIGNAL-3")
 
-// You can also override other defaults from lib/HSC_Base/src/config.h here
-// For example:
-// #undef FW_VERSION
-// static const char FW_VERSION[] = "1.0.0";
+// --- Pin Definitions ---
+// Matches the plan: 32, 33, 25, 26, 27, 14
+static const int PIN_TRACK_1 = 32;
+static const int PIN_TRACK_2 = 33;
+static const int PIN_TRACK_3 = 25;
+static const int PIN_TRACK_4 = 26;
+static const int PIN_TRACK_5 = 27;
+static const int PIN_TRACK_6 = 14;
+static const int PIN_TRACK_7 = 12;
+static const int PIN_TRACK_8 = 13;
+
+// Array for easier iteration
+static const int TRACK_PINS[] = {PIN_TRACK_1, PIN_TRACK_2, PIN_TRACK_3,
+                                 PIN_TRACK_4, PIN_TRACK_5, PIN_TRACK_6,
+                                 PIN_TRACK_7, PIN_TRACK_8};
+static const int NUM_TRACKS_PER_BOARD = 8;
+
+// Debounce time in milliseconds
+const unsigned long DEBOUNCE_DELAY = 50;
 
 #endif

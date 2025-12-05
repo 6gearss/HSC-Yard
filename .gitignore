@@ -20,3 +20,6 @@ credentials.h
 
 # Keep the library
 !lib/HSC_Base/
+
+#Web files
+web/*
