@@ -11,9 +11,13 @@ static const char BOARD_TYPE_DESC[] =
 static const char BOARD_TYPE_SHORT[] =
     "NEW"; // Short name for MQTT (e.g., "BASE-1", "YARD-2", "SIGNAL-3")
 
+// --- OTA Update ---
+static const char *UPDATE_URL =
+    "http://www-srvr.internal/firmware/firmware_%BOARD_TYPE%.bin";
+
 // You can also override other defaults from lib/HSC_Base/src/config.h here
 // For example:
-// #undef FW_VERSION
-// static const char FW_VERSION[] = "1.0.0";
+#undef FW_VERSION
+static const char FW_VERSION[] = "0.2.0";
 
 #endif

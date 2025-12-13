@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSC Firmware Update</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .release-notes {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 12px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            display: none;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .status-badge.up-to-date {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-badge.update-available {
+            background: #fef9c3;
+            color: #854d0e;
+        }
+
+        .status-badge.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .version-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .version-row:last-child {
+            border-bottom: none;
+        }
+
+        .version-label {
+            color: var(--muted-text);
+            font-weight: 500;
+        }
+
+        .version-val {
+            font-family: monospace;
+            font-weight: 600;
+        }
+
+        #updateProgress {
+            display: none;
+            margin-top: 16px;
+            text-align: center;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Firmware Management</h1>
+        <span class="header-location">%BOARD_TYPE_SHORT%-%CAN_ID%</span>
+    </header>
+    <main>
+        <div class="card">
+            <h2>System Status</h2>
+            <div class="version-row">
+                <span class="version-label">Current Firmware:</span>
+                <span class="version-val">%FW_REV%</span>
+            </div>
+            <div class="version-row">
+                <span class="version-label">Board Type:</span>
+                <span class="version-val">%BOARD_TYPE%</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Update Firmware</h2>
+            <p style="color: var(--muted-text); font-size: 0.9rem; margin-bottom: 16px;">
+                Check for the latest firmware updates for your device.
+            </p>
+
+            <div id="checkSection">
+                <button id="checkBtn" class="btn-link"
+                    style="background: var(--primary-color); color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px;">Check
+                    for Updates</button>
+                <span id="checkStatus" style="margin-left: 10px; font-size: 0.9rem; color: var(--muted-text);"></span>
+            </div>
+
+            <div id="updateInfo" style="display: none; margin-top: 20px;">
+                <div class="version-row">
+                    <span class="version-label">New Version:</span>
+                    <span class="version-val" id="remoteVersion"></span>
+                </div>
+                <div class="release-notes" id="releaseNotes"></div>
+
+                <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+                    <button id="performUpdateBtn" class="btn-link"
+                        style="background: #16a34a; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px;">Install
+                        Update Now</button>
+                    <span style="font-size: 0.8rem; color: #ef4444;">⚠️ Device will reboot</span>
+                </div>
+            </div>
+
+            <div id="updateProgress">
+                Update in progress... Please wait. <br>
+                Device will reboot automatically.
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="/" class="btn-link">Home</a>
+            <a href="/device" class="btn-link">Device</a>
+        </div>
+    </main>
+    <footer>
+        <div class="footer-grid">
+            <!-- Row 1: Network & Connection Info -->
+            <div class="footer-row">
+                <div class="footer-pair">
+                    <span class="label">Host:</span>
+                    <span class="value">%HOSTNAME%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">IP:</span>
+                    <span class="value">%IP%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">SSID:</span>
+                    <span class="value">%SSID%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">Signal:</span>
+                    <span class="value" id="rssi">%RSSI%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">MQTT:</span>
+                    <span class="value">%MQTT_STATUS%</span>
+                </div>
+
+                <!-- CAN -->
+                <div class="footer-pair">
+                    <span class="label">CAN ID:</span>
+                    <span class="value">%CAN_ID%</span>
+                </div>
+                <div class="footer-pair">
+                    <span class="label">CAN:</span>
+                    <span class="value">%CAN_STATUS%</span>
+                </div>
+            </div>
+
+            <!-- Row 2: System Info -->
+            <div class="footer-row">
+                <div class="footer-pair">
+                    <span class="label">FW:</span>
+                    <span class="value">%FW_REV%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">Date/Time:</span>
+                    <span class="value" id="runtime">%DATETIME%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">Uptime:</span>
+                    <span class="value" id="uptime">%UPTIME%</span>
+                </div>
+
+                <div class="footer-pair">
+                    <span class="label">Free Mem:</span>
+                    <span class="value" id="freemem">%FREE_MEMORY%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="copyright">
+            HSC Engineering &copy;2025
+        </div>
+    </footer>
+    <script>
+        const checkBtn = document.getElementById('checkBtn');
+        const checkStatus = document.getElementById('checkStatus');
+        const updateInfo = document.getElementById('updateInfo');
+        const remoteVersionSpan = document.getElementById('remoteVersion');
+        const releaseNotesDiv = document.getElementById('releaseNotes');
+        const performUpdateBtn = document.getElementById('performUpdateBtn');
+        const updateProgress = document.getElementById('updateProgress');
+
+        checkBtn.addEventListener('click', () => {
+            checkStatus.textContent = 'Checking...';
+            updateInfo.style.display = 'none';
+            checkBtn.disabled = true;
+
+            fetch('/api/firmware/check')
+                .then(r => r.json())
+                .then(data => {
+                    checkBtn.disabled = false;
+                    if (data.status === 'error') {
+                        checkStatus.innerHTML = `<span class="status-badge error">Error: ${data.message}</span>`;
+                        return;
+                    }
+
+                    if (data.update_available) {
+                        checkStatus.innerHTML = `<span class="status-badge update-available">Update Available</span>`;
+                        remoteVersionSpan.textContent = data.remote_version;
+                        releaseNotesDiv.textContent = data.notes || 'No release notes provided.';
+                        releaseNotesDiv.style.display = 'block';
+                        updateInfo.style.display = 'block';
+                    } else {
+                        checkStatus.innerHTML = `<span class="status-badge up-to-date">Up to Date</span>`;
+                        remoteVersionSpan.textContent = data.remote_version;
+                        // Show notes even if up to date? maybe not.
+                    }
+                })
+                .catch(e => {
+                    checkBtn.disabled = false;
+                    checkStatus.innerHTML = `<span class="status-badge error">Connection Failed</span>`;
+                    console.error(e);
+                });
+        });
+
+        performUpdateBtn.addEventListener('click', () => {
+            if (!confirm("Start firmware update? Do not power off the device.")) return;
+
+            updateInfo.style.display = 'none';
+            checkSection.style.display = 'none';
+            updateProgress.style.display = 'block';
+
+            fetch('/api/update', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('Update initiated. Device is rebooting...');
+                        setTimeout(() => window.location.href = '/', 15000);
+                    } else {
+                        alert('Update failed to start: ' + data.message);
+                        location.reload();
+                    }
+                })
+                .catch(e => {
+                    alert('Error communicating with device');
+                    location.reload();
+                });
+        });
+    </script>
+</body>
+
+</html>

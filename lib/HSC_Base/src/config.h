@@ -2,7 +2,7 @@
 #define CONFIG_H
 
 // --- General Configuration ---
-static const char FW_VERSION[] = "0.1.0"; // Base Template
+static const char FW_VERSION[] = "0.2.0"; // Base Template
 
 // --- Board Type ---
 // Override these in your project's src/config.h
@@ -27,5 +27,9 @@ static const int BOARD_ID = 0;
 // --- Pin Definitions ---
 // AP Mode Button
 static const int PIN_AP_BUTTON = 4;
+
+// --- OTA Update ---
+// static const char *UPDATE_URL =
+// "http://your-server/firmware_%BOARD_TYPE%.bin";
 
 #endif

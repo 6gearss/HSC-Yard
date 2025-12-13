@@ -14,6 +14,7 @@ struct Config {
   String mqtt_password;
   int board_id;
   String location;
+  String update_url;
 };
 
 class ConfigManager {

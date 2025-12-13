@@ -18,6 +18,7 @@ void ConfigManager::loadDefaults() {
   _config.board_id = BOARD_ID;
   _config.location = "";
   _config.location = "";
+  _config.update_url = "";
 }
 
 Config ConfigManager::load() {
@@ -40,7 +41,9 @@ Config ConfigManager::load() {
   _config.mqtt_password = _prefs.getString("mqtt_pass", MQTT_PASSWORD);
   _config.board_id = _prefs.getInt("board_id", BOARD_ID);
   _config.location = _prefs.getString("location", "");
-  _config.location = _prefs.getString("location", "");
+  // _config.update_url is set by loadDefaults() and not stored in NVS to allow
+  // config.h changes
+  _config.update_url = "";
 
   _prefs.end();
 
@@ -61,6 +64,7 @@ bool ConfigManager::save(const Config &config) {
   _prefs.putInt("board_id", config.board_id);
   _prefs.putString("location", config.location);
   _prefs.putString("location", config.location);
+  // _prefs.putString("update_url", config.update_url); // Moved to config.h
 
   _prefs.end();
 
