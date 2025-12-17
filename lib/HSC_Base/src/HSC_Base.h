@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <HTTPUpdate.h>
 #include <PubSubClient.h>
 #include <SPIFFS.h>
 #include <WiFi.h>
@@ -20,7 +21,14 @@ public:
   void loop();
 
   // Set Board Info
-  void setBoardInfo(const char *desc, const char *shortName);
+  void setBoardInfo(const char *desc, const char *shortName,
+                    const char *fwVersion);
+
+  // Set Update URL
+  void setUpdateUrl(const char *url);
+
+  // Perform OTA Update
+  void performOTA(const String &url);
 
   // Register a custom page handler
   void registerPage(const char *uri, ArRequestHandlerFunction handler);
@@ -54,6 +62,15 @@ private:
   void reconnectMqtt();
   void setupWebServer();
   String processor(const String &var);
+
+  String _preConfigUpdateUrl;
+  bool shouldUpdate = false;
+  String firmwareVersion = FW_VERSION;
+
+  // Device Identity
+  String deviceId;
+  String macStr;
+  time_t bootTime = 0;
 };
 
 #endif

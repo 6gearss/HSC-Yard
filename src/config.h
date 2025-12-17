@@ -30,5 +30,13 @@ static const int NUM_TRACKS_PER_BOARD = 8;
 
 // Debounce time in milliseconds
 const unsigned long DEBOUNCE_DELAY = 50;
+// --- OTA Update ---
+static const char *UPDATE_URL =
+    "http://www-srvr.internal/firmware/firmware_%BOARD_TYPE%.bin";
+
+// You can also override other defaults from lib/HSC_Base/src/config.h here
+// For example:
+#undef FW_VERSION
+static const char FW_VERSION[] = "0.2.0";
 
 #endif

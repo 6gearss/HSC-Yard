@@ -14,7 +14,7 @@ static const char index_html[] PROGMEM = R"rawliteral(
 </head>
 <body>
     <header>
-        <h1>HSC Device Configuration</h1>
+        <h1>HSC Base Configuration</h1>
         <span id="headerLocation" class="header-location"></span>
     </header>
     <main>
@@ -64,6 +64,7 @@ static const char index_html[] PROGMEM = R"rawliteral(
                 <div class="actions">
                     <a href="/" class="btn-link">Home</a>
                     <a href="/device" class="btn-link">Device</a>
+                    <a href="/firmware" class="btn-link">Firmware</a>
                     <button type="button" id="restartBtn" class="btn-link">Restart</button>
                     <button type="button" id="locateLink" class="btn-link">Locate Board</button>
                     <button type="submit" class="btn-link">Save Settings</button>
@@ -126,6 +127,7 @@ static const char index_html[] PROGMEM = R"rawliteral(
                         .catch(err => alert('Failed to restart'));
                 }
             });
+
             document.getElementById('resetBtn').addEventListener('click', function () {
                 if (confirm('Are you sure you want to reset all settings to defaults? This will reboot the device.')) {
                     fetch('/api/reset', { method: 'POST' })
@@ -406,9 +408,15 @@ HSC_Base::HSC_Base() : server(80), mqttClient(espClient) {
   boardTypeShort = BOARD_TYPE_SHORT;
 }
 
-void HSC_Base::setBoardInfo(const char *desc, const char *shortName) {
+#include <HTTPClient.h>
+
+void HSC_Base::setUpdateUrl(const char *url) { _preConfigUpdateUrl = url; }
+
+void HSC_Base::setBoardInfo(const char *desc, const char *shortName,
+                            const char *fwVersion) {
   boardTypeDesc = desc;
   boardTypeShort = shortName;
+  firmwareVersion = fwVersion;
 }
 
 void HSC_Base::begin() {
@@ -432,12 +440,33 @@ void HSC_Base::begin() {
   }
   currentConfig = configManager.load();
 
+  // Apply update URL from setup() if available
+  if (_preConfigUpdateUrl.length() > 0) {
+    currentConfig.update_url = _preConfigUpdateUrl;
+  }
+
   setupWifi();
   mqttClient.setServer(currentConfig.mqtt_server.c_str(),
                        currentConfig.mqtt_port);
 
   setupWebServer();
   server.begin();
+
+  // Initialize Identity
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char macBuf[20];
+  sprintf(macBuf, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2],
+          mac[3], mac[4], mac[5]);
+  macStr = String(macBuf);
+
+  char devIdBuf[32];
+  sprintf(devIdBuf, "esp32-%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2],
+          mac[3], mac[4], mac[5]);
+  deviceId = String(devIdBuf);
+
+  // Approximate boot time (will be refined when NTP syncs)
+  bootTime = time(nullptr);
 }
 
 void HSC_Base::loop() {
@@ -481,6 +510,12 @@ void HSC_Base::loop() {
     }
   } else {
     digitalWrite(2, LOW);
+  }
+
+  // Handle Update
+  if (shouldUpdate) {
+    shouldUpdate = false;
+    performOTA(currentConfig.update_url);
   }
 
   // Handle MQTT
@@ -547,24 +582,49 @@ void HSC_Base::reconnectMqtt() {
   String clientId = "HSC-Device-";
   clientId += String(currentConfig.board_id);
 
-  if (mqttClient.connect(clientId.c_str(), currentConfig.mqtt_user.c_str(),
-                         currentConfig.mqtt_password.c_str())) {
+  if (mqttClient.connect(deviceId.c_str(), currentConfig.mqtt_user.c_str(),
+                         currentConfig.mqtt_password.c_str(),
+                         ("HSC/devices/" + deviceId + "/status").c_str(), 0,
+                         true, "offline")) {
     Serial.println("connected");
 
-    String topic = "HSC/device/announce";
-    String deviceName = boardTypeShort + "-" + String(currentConfig.board_id);
+    // 1. Publish Online Status (Retained)
+    String statusTopic = "HSC/devices/" + deviceId + "/status";
+    mqttClient.publish(statusTopic.c_str(), "online", true);
 
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    char hostname[20];
-    sprintf(hostname, "esp32-%02X%02X%02X", mac[3], mac[4], mac[5]);
+    // 2. Publish Device Information (Retained)
+    // Calculate boot time based on current time - uptime
+    time_t now;
+    time(&now);
+    time_t actualBootTime = now - (millis() / 1000);
 
-    String ipAddress = WiFi.localIP().toString();
-    String payload = deviceName + "," + String(hostname) + "," + ipAddress;
-    mqttClient.publish(topic.c_str(), payload.c_str(), true);
+    StaticJsonDocument<512> doc;
+    doc["device_id"] = deviceId;
+    doc["model"] = boardTypeDesc;
+    doc["board_code"] = boardTypeShort;
+    doc["firmware"] = firmwareVersion;
+    doc["mac"] = macStr;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["boot_time"] = actualBootTime;
 
-    String statusTopic = "HSC/device/status/" + String(currentConfig.board_id);
-    mqttClient.publish(statusTopic.c_str(), "online");
+    String infoTopic = "HSC/devices/" + deviceId + "/info";
+    char buffer[512];
+    serializeJson(doc, buffer);
+    mqttClient.publish(infoTopic.c_str(), buffer, true);
+
+    // 3. Optional Boot Announcement (Non-retained)
+    // We send this every time we reconnect, which acts as a "device allows" or
+    // "hello" message
+    StaticJsonDocument<128> bootDoc;
+    bootDoc["device_id"] = deviceId;
+    bootDoc["event"] = "boot"; // or 'reconnect' if we wanted to be specific
+    char bootBuf[128];
+    serializeJson(bootDoc, bootBuf);
+    mqttClient.publish("HSC/devices/announce", bootBuf, false);
+
+    // 4. Subscribe to Configuration
+    String configTopic = "HSC/devices/" + deviceId + "/config";
+    mqttClient.subscribe(configTopic.c_str());
   } else {
     Serial.print("failed, rc=");
     Serial.println(mqttClient.state());
@@ -573,7 +633,7 @@ void HSC_Base::reconnectMqtt() {
 
 String HSC_Base::processor(const String &var) {
   if (var == "FW_REV") {
-    return FW_VERSION;
+    return firmwareVersion;
   }
   if (var == "IP") {
     if (WiFi.status() == WL_CONNECTED) {
@@ -672,6 +732,16 @@ void HSC_Base::setupWebServer() {
                     [this](const String &var) { return processor(var); });
     } else {
       request->send(404, "text/plain", "Device page not found");
+    }
+  });
+
+  // Serve firmware.html from SPIFFS
+  server.on("/firmware", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    if (SPIFFS.exists("/firmware.html")) {
+      request->send(SPIFFS, "/firmware.html", "text/html", false,
+                    [this](const String &var) { return processor(var); });
+    } else {
+      request->send(404, "text/plain", "Firmware page not found");
     }
   });
 
@@ -785,6 +855,79 @@ void HSC_Base::setupWebServer() {
     shouldReboot = true;
   });
 
+  // API: OTA Update
+  server.on("/api/update", HTTP_POST, [this](AsyncWebServerRequest *request) {
+    request->send(200, "application/json",
+                  "{\"status\":\"success\",\"message\":\"Update started. Check "
+                  "Serial Monitor. Device will reboot...\"}");
+    shouldUpdate = true;
+  });
+
+  // API: Check Firmware
+  server.on(
+      "/api/firmware/check", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        const char *currentVersion = firmwareVersion.c_str();
+        String updateUrl = currentConfig.update_url;
+        if (updateUrl.length() == 0) {
+          request->send(400, "application/json",
+                        "{\"status\":\"error\",\"message\":\"No update URL "
+                        "configured\"}");
+          return;
+        }
+
+        // Resolve URL
+        updateUrl.replace("%BOARD_TYPE%", boardTypeShort);
+
+        // Derive Metadata URL (replace extension .bin with .json)
+        String checkUrl = updateUrl;
+        int dotIndex = checkUrl.lastIndexOf('.');
+        if (dotIndex != -1) {
+          checkUrl = checkUrl.substring(0, dotIndex) + ".json";
+        } else {
+          checkUrl += ".json";
+        }
+
+        WiFiClient client;
+        HTTPClient http;
+        http.begin(client, checkUrl);
+        int httpCode = http.GET();
+
+        if (httpCode == HTTP_CODE_OK) {
+          String payload = http.getString();
+          StaticJsonDocument<1024> remoteDoc;
+          DeserializationError error = deserializeJson(remoteDoc, payload);
+
+          if (!error) {
+            String remoteVersion = remoteDoc["version"] | "unknown";
+            String notes = remoteDoc["notes"] | "";
+
+            bool updateAvailable = remoteVersion != String(currentVersion);
+
+            // Construct response
+            StaticJsonDocument<1024> resDoc;
+            resDoc["current_version"] = currentVersion;
+            resDoc["remote_version"] = remoteVersion;
+            resDoc["update_available"] = updateAvailable;
+            resDoc["notes"] = notes;
+
+            String resStr;
+            serializeJson(resDoc, resStr);
+            request->send(200, "application/json", resStr);
+          } else {
+            request->send(
+                502, "application/json",
+                "{\"status\":\"error\",\"message\":\"Invalid JSON from "
+                "server\"}");
+          }
+        } else {
+          request->send(
+              502, "application/json",
+              "{\"status\":\"error\",\"message\":\"Failed to fetch update "
+              "metadata\"}");
+        }
+        http.end();
+      });
+
   // API: Get Status
   server.on("/api/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
     AsyncResponseStream *response =
@@ -844,4 +987,123 @@ void HSC_Base::registerPage(const char *uri, ArRequestHandlerFunction handler) {
 void HSC_Base::registerApi(const char *uri, WebRequestMethodComposite method,
                            ArRequestHandlerFunction handler) {
   server.on(uri, method, handler);
+}
+
+void HSC_Base::performOTA(const String &url) {
+  if (url.length() == 0) {
+    Serial.println("OTA Error: No URL configured");
+    return;
+  }
+
+  String finalUrl = url;
+  finalUrl.replace("%BOARD_TYPE%", boardTypeShort);
+
+  // Check metadata for SPIFFS update
+  String checkUrl = finalUrl;
+  int dotIndex = checkUrl.lastIndexOf('.');
+  if (dotIndex != -1) {
+    checkUrl = checkUrl.substring(0, dotIndex) + ".json";
+  } else {
+    checkUrl += ".json";
+  }
+
+  bool updateSpiffs = false;
+  WiFiClient client;
+  HTTPClient http;
+
+  // Reuse client logic for http/https in check
+  if (checkUrl.startsWith("https")) {
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure();
+    http.begin(secureClient, checkUrl);
+  } else {
+    http.begin(client, checkUrl);
+  }
+
+  int httpCode = http.GET();
+  if (httpCode == HTTP_CODE_OK) {
+    String payload = http.getString();
+    StaticJsonDocument<1024> doc;
+    DeserializationError error = deserializeJson(doc, payload);
+    if (!error) {
+      updateSpiffs = doc["update_spiffs"] | false;
+    }
+  }
+  http.end();
+
+  if (updateSpiffs) {
+    Serial.println("Filesystem update requested...");
+    String spiffsUrl = finalUrl;
+    if (dotIndex != -1) {
+      spiffsUrl = spiffsUrl.substring(0, dotIndex) + ".spiffs.bin";
+    } else {
+      spiffsUrl += ".spiffs.bin";
+    }
+    Serial.println("SPIFFS URL: " + spiffsUrl);
+
+    // Unmount SPIFFS to ensure safe update
+    SPIFFS.end();
+
+    httpUpdate.rebootOnUpdate(false); // Don't reboot after SPIFFS
+
+    t_httpUpdate_return ret;
+    if (spiffsUrl.startsWith("https")) {
+      WiFiClientSecure secureClient;
+      secureClient.setInsecure();
+      ret = httpUpdate.updateSpiffs(secureClient, spiffsUrl);
+    } else {
+      ret = httpUpdate.updateSpiffs(client, spiffsUrl);
+    }
+
+    if (ret == HTTP_UPDATE_OK) {
+      Serial.println("SPIFFS Update OK");
+    } else {
+      Serial.printf("SPIFFS Update Failed (%d): %s\n",
+                    httpUpdate.getLastError(),
+                    httpUpdate.getLastErrorString().c_str());
+      // Try to recover SPIFFS mount if update failed
+      SPIFFS.begin(true);
+    }
+  }
+
+  Serial.println("Starting Firmware Update...");
+  Serial.println("URL: " + finalUrl);
+
+  httpUpdate.rebootOnUpdate(true); // Reboot after firmware
+
+  if (finalUrl.startsWith("https")) {
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure(); // Skip cert validation
+    t_httpUpdate_return ret = httpUpdate.update(secureClient, finalUrl);
+
+    switch (ret) {
+    case HTTP_UPDATE_FAILED:
+      Serial.printf("HTTP_UPDATE_FAILED Error (%d): %s\n",
+                    httpUpdate.getLastError(),
+                    httpUpdate.getLastErrorString().c_str());
+      break;
+    case HTTP_UPDATE_NO_UPDATES:
+      Serial.println("HTTP_UPDATE_NO_UPDATES");
+      break;
+    case HTTP_UPDATE_OK:
+      Serial.println("HTTP_UPDATE_OK");
+      break;
+    }
+  } else {
+    t_httpUpdate_return ret = httpUpdate.update(client, finalUrl);
+
+    switch (ret) {
+    case HTTP_UPDATE_FAILED:
+      Serial.printf("HTTP_UPDATE_FAILED Error (%d): %s\n",
+                    httpUpdate.getLastError(),
+                    httpUpdate.getLastErrorString().c_str());
+      break;
+    case HTTP_UPDATE_NO_UPDATES:
+      Serial.println("HTTP_UPDATE_NO_UPDATES");
+      break;
+    case HTTP_UPDATE_OK:
+      Serial.println("HTTP_UPDATE_OK");
+      break;
+    }
+  }
 }

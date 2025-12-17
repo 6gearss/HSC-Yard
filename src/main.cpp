@@ -42,7 +42,8 @@ void publishAllTracks() {
 
 void setup() {
   // Initialize the HSC_Base library
-  hscBase.setBoardInfo(BOARD_TYPE_DESC, BOARD_TYPE_SHORT);
+  hscBase.setBoardInfo(BOARD_TYPE_DESC, BOARD_TYPE_SHORT, FW_VERSION);
+  hscBase.setUpdateUrl(UPDATE_URL);
   hscBase.begin();
 
   // Initialize Pins

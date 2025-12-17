@@ -23,3 +23,10 @@ credentials.h
 
 #Web files
 web/*
+
+# Ignore OTA artifacts
+firmware_*.bin
+firmware_*.json
+
+
+
