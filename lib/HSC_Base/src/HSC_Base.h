@@ -66,6 +66,11 @@ private:
   String _preConfigUpdateUrl;
   bool shouldUpdate = false;
   String firmwareVersion = FW_VERSION;
+
+  // Device Identity
+  String deviceId;
+  String macStr;
+  time_t bootTime = 0;
 };
 
 #endif

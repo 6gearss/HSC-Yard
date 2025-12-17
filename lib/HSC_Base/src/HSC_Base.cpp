@@ -451,6 +451,22 @@ void HSC_Base::begin() {
 
   setupWebServer();
   server.begin();
+
+  // Initialize Identity
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char macBuf[20];
+  sprintf(macBuf, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2],
+          mac[3], mac[4], mac[5]);
+  macStr = String(macBuf);
+
+  char devIdBuf[32];
+  sprintf(devIdBuf, "esp32-%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2],
+          mac[3], mac[4], mac[5]);
+  deviceId = String(devIdBuf);
+
+  // Approximate boot time (will be refined when NTP syncs)
+  bootTime = time(nullptr);
 }
 
 void HSC_Base::loop() {
@@ -566,24 +582,49 @@ void HSC_Base::reconnectMqtt() {
   String clientId = "HSC-Device-";
   clientId += String(currentConfig.board_id);
 
-  if (mqttClient.connect(clientId.c_str(), currentConfig.mqtt_user.c_str(),
-                         currentConfig.mqtt_password.c_str())) {
+  if (mqttClient.connect(deviceId.c_str(), currentConfig.mqtt_user.c_str(),
+                         currentConfig.mqtt_password.c_str(),
+                         ("HSC/devices/" + deviceId + "/status").c_str(), 0,
+                         true, "offline")) {
     Serial.println("connected");
 
-    String topic = "HSC/device/announce";
-    String deviceName = boardTypeShort + "-" + String(currentConfig.board_id);
+    // 1. Publish Online Status (Retained)
+    String statusTopic = "HSC/devices/" + deviceId + "/status";
+    mqttClient.publish(statusTopic.c_str(), "online", true);
 
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    char hostname[20];
-    sprintf(hostname, "esp32-%02X%02X%02X", mac[3], mac[4], mac[5]);
+    // 2. Publish Device Information (Retained)
+    // Calculate boot time based on current time - uptime
+    time_t now;
+    time(&now);
+    time_t actualBootTime = now - (millis() / 1000);
 
-    String ipAddress = WiFi.localIP().toString();
-    String payload = deviceName + "," + String(hostname) + "," + ipAddress;
-    mqttClient.publish(topic.c_str(), payload.c_str(), true);
+    StaticJsonDocument<512> doc;
+    doc["device_id"] = deviceId;
+    doc["model"] = boardTypeDesc;
+    doc["board_code"] = boardTypeShort;
+    doc["firmware"] = firmwareVersion;
+    doc["mac"] = macStr;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["boot_time"] = actualBootTime;
 
-    String statusTopic = "HSC/device/status/" + String(currentConfig.board_id);
-    mqttClient.publish(statusTopic.c_str(), "online");
+    String infoTopic = "HSC/devices/" + deviceId + "/info";
+    char buffer[512];
+    serializeJson(doc, buffer);
+    mqttClient.publish(infoTopic.c_str(), buffer, true);
+
+    // 3. Optional Boot Announcement (Non-retained)
+    // We send this every time we reconnect, which acts as a "device allows" or
+    // "hello" message
+    StaticJsonDocument<128> bootDoc;
+    bootDoc["device_id"] = deviceId;
+    bootDoc["event"] = "boot"; // or 'reconnect' if we wanted to be specific
+    char bootBuf[128];
+    serializeJson(bootDoc, bootBuf);
+    mqttClient.publish("HSC/devices/announce", bootBuf, false);
+
+    // 4. Subscribe to Configuration
+    String configTopic = "HSC/devices/" + deviceId + "/config";
+    mqttClient.subscribe(configTopic.c_str());
   } else {
     Serial.print("failed, rc=");
     Serial.println(mqttClient.state());
