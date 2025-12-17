@@ -81,7 +81,8 @@ CURRENT_DATE=$(date "+%Y-%m-%d %H:%M:%S")
 cat <<EOF > "$JSON_NAME"
 {
   "version": "$VERSION",
-  "notes": "Build created on $CURRENT_DATE"
+  "notes": "Build created on $CURRENT_DATE",
+  "update_spiffs": true
 }
 EOF
 
